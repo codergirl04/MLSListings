@@ -1,0 +1,422 @@
+// @version1.0 07-28-2020
+// @author Maya Itty
+//  File name: TransactionAnalyzer.java
+//  Program purpose: GUI application: simplified version of MLS (Listings of properties on sales).
+//  Displays condos or single family homes based on what the user selects.
+//  Revision history:
+//   Date                  Programmer          Change ID      Description
+//   07/28/2020            Maya Itty           0000           Initial implementation
+
+import java.awt.*;
+import javax.swing.*;
+import java.awt.event.*;
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.*;
+
+public class MLSListingsApp {
+
+    public static void main(String[] args) {
+        PropertyList propertyList = new PropertyList();
+        propertyList.initialize();
+        EventQueue.invokeLater(new Runnable() {
+            @Override
+            public void run() {
+                MLSListingsView mlsView = new MLSListingsView();
+                mlsView.setProperties(propertyList);
+                mlsView.setVisible(true);
+            }
+        });
+    }
+}
+
+public class MLSListingsView extends JFrame {
+
+    private static final int viewWidth = 720;
+    private static final int viewHeight = 450;
+    private static final int listingsRows = 20;
+    private static final int listingsColumns = 60;
+    private PropertyList propertyList;
+    private String priceRange = "Under 400K";
+
+    // UI Components
+    private JTextArea listings;
+    private JButton showAll;
+    private JButton showSFH;
+    private JButton showCondos;
+    private JButton clear;
+
+    public MLSListingsView() {
+        // frame setup
+        setTitle("MLSListings");
+        setSize(MLSListingsView.viewWidth, MLSListingsView.viewHeight);
+        setLocationRelativeTo(null);
+
+        // 1. Create panels
+        JPanel searchPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        // (must be adding components left justified)
+        JPanel displayPanel = new JPanel();
+        JPanel actionPanel = new JPanel();
+
+        // 2. Create individual UI components for the panels and add them to the panels
+
+        // 2a. searchPanel
+        String[] options = {"Under 400K", "400K - <600K", "600K - <800K",
+                "800K - <1M", "1M or more"};
+        JLabel label = new JLabel ("Search Properties: ");
+        JComboBox<String> comboBox = new JComboBox<String> (options);
+        JButton go = new JButton("Go");
+        searchPanel.add(label);
+        searchPanel.add(comboBox);
+        searchPanel.add(go);
+
+        // 2b. displayPanel - only contains the textArea
+        listings = new JTextArea(MLSListingsView.listingsRows, MLSListingsView.listingsColumns);
+        listings.setFont(new Font("monospaced", Font.PLAIN, 12));
+        listings.setBorder(BorderFactory.createEtchedBorder());
+        displayPanel.add(listings);
+
+        // 2c. actionPanel
+        showAll = new JButton("Show All");
+        showSFH = new JButton(("Show SFH"));
+        showCondos = new JButton("Show Condos");
+        clear = new JButton(("Clear"));
+        actionPanel.add(showAll);
+        actionPanel.add(showSFH);
+        actionPanel.add(showCondos);
+        actionPanel.add(clear);
+
+        // 3. Add panels to the frame
+        add(searchPanel, BorderLayout.NORTH);
+        add(displayPanel, BorderLayout.CENTER);
+        add(actionPanel, BorderLayout.SOUTH);
+
+        // 4. Provide event handlers for UI components (buttons in the GUI)
+        showAll.addActionListener(e ->
+                listings.setText(propertyList.getAllProperties()));
+
+        showSFH.addActionListener(e ->
+                listings.setText(propertyList.getSingleFamilyHouse()));
+
+        showCondos.addActionListener(e ->
+                listings.setText(propertyList.getCondo()));
+
+        comboBox.addActionListener (e ->
+                priceRange = (String) ((JComboBox<String>) e.getSource ()).getSelectedItem ());
+
+        go.addActionListener(e -> {
+            switch (priceRange) {
+                case "Under 400K" -> listings.setText(propertyList.searchByPriceRange(0, 400000));
+                case "400K - <600K" -> listings.setText(propertyList.searchByPriceRange(400000, 600000));
+                case "600K - <800K" -> listings.setText(propertyList.searchByPriceRange(600000, 800000));
+                case "800K - <1M" -> listings.setText(propertyList.searchByPriceRange(800000, 1000000));
+                case "1M or more" -> listings.setText(propertyList.searchByPriceRange(1000000, 0));
+            }
+        });
+
+        clear.addActionListener (e -> listings.setText(""));
+
+        // 5. System.exit when users close the frame
+        addWindowListener (new WindowAdapter() {
+            public void windowClosing (WindowEvent e) {
+                System.exit(0);
+            }
+        });
+    }
+
+    public void setProperties(PropertyList propertyList) {
+        this.propertyList = propertyList;
+    }
+}
+
+public class PropertyList {
+
+    private Property head;
+    private static String textFileLocation = "src/DataFile.txt";
+
+    // default constructor
+    public PropertyList() {
+        this.head = null;
+    }
+
+    // adds a Property object (Single Family House or Condo) to the front of the linked list
+    private void insert(Property property) {
+        property.setNext(this.head);
+        this.head = property;
+    }
+
+    // reads each line of a data file
+    public void initialize() {
+        BufferedReader reader;
+        String line;
+        Path inputFilePath = Paths.get(textFileLocation);
+        int index = 0;
+        try {
+            reader =  Files.newBufferedReader(inputFilePath, StandardCharsets.US_ASCII);
+            while ((line = reader.readLine()) != null) {
+                instantiateProperty(line, index++);
+            }
+            reader.close ();
+        } catch (IOException e)  {
+            e.printStackTrace ();
+        }
+    }
+
+    // instantiates a SingleFamilyHouse or Condo object depending on the data read
+    // from the data file
+    public void instantiateProperty(String line, int index) {
+        String property_type;
+        String address;
+        double offer_price;
+        int year_built;
+
+        String[] data = line.split(";");
+        property_type = data[0].toLowerCase();
+        address = data[1];
+        offer_price = Double.parseDouble(data[2]);
+        year_built = Integer.parseInt(data[3]);
+
+        if (property_type.equals("sfh")) {
+            int backyardArea = Integer.parseInt(data[4]);
+            this.insert(new SingleFamilyHouse(address, offer_price,
+                    year_built, backyardArea));
+        }
+        else if (property_type.equals("condo")) {
+            double hoaFee = Double.parseDouble(data[4]);
+            this.insert(new Condo(address, offer_price, year_built, hoaFee));
+        }
+    }
+
+    // navigates through the entire linked list to combine all the nodes'
+    // Strings into a single String and returns it
+    public String getAllProperties() {
+        Property property = this.head;
+        StringBuilder propertiesString = new StringBuilder();
+        propertiesString.append(String.format("%-50s%-15s%-10s%-10s", "Address",
+                "Price", "Year", "Other info"));
+        while (property.getNext() != null) {
+            propertiesString.append("\n").append(property.toString());
+            property = property.getNext();
+        }
+        return propertiesString.toString();
+    }
+
+    // navigates through the entire linked list to combine all the
+    // SingleFamilyHouse objects' Strings into a single String and returns it
+    public String getSingleFamilyHouse() {
+        Property property = this.head;
+        StringBuilder propertiesString = new StringBuilder();
+        propertiesString.append(String.format("%-50s%-15s%-10s%-10s", "Address",
+                "Price", "Year", "Other info"));
+        while(property.getNext() != null) {
+            if (property instanceof SingleFamilyHouse) {
+                propertiesString.append("\n").append(property.toString());
+            }
+            property = property.getNext();
+        }
+        return propertiesString.toString();
+    }
+
+    // navigates through the entire linked list to combine all the
+    // Condo objects' Strings into a single String and returns it
+    public String getCondo() {
+        Property property = this.head;
+        StringBuilder propertiesString = new StringBuilder();
+        propertiesString.append(String.format("%-50s%-15s%-10s%-10s", "Address",
+                "Price", "Year", "Other info"));
+        while(property.getNext() != null) {
+            if (property instanceof Condo) {
+                propertiesString.append("\n").append(property.toString());
+            }
+            property = property.getNext();
+        }
+        return propertiesString.toString();
+    }
+
+    // navigates through the entire linked list to combine all the nodes
+    // with prices falling within the range min-max into a String
+    public String searchByPriceRange(double min, double max) {
+        // ** pass max as 0 to search for all properties whose price is greater
+        // than the minimum value **
+        Property property = this.head;
+        StringBuilder propertiesString = new StringBuilder();
+        propertiesString.append(String.format("%-50s%-15s%-10s%-10s", "Address",
+                "Price", "Year", "Other info"));
+        if (max == 0) {
+            while(property.getNext() != null) {
+                if (property.getOfferedPrice() >= min) {
+                    propertiesString.append("\n").append(property.toString());
+                }
+                property = property.getNext();
+            }
+        }
+        else {
+            while (property.getNext() != null) {
+                if (property.getOfferedPrice() >= min && property.getOfferedPrice() < max) {
+                    propertiesString.append("\n").append(property.toString());
+                }
+                property = property.getNext();
+            }
+        }
+        return propertiesString.toString();
+    }
+}
+
+public class Property {
+
+    // private instance fields
+    private String address;
+    private double offeredPrice;
+    private int yearBuilt;
+    private Property next;
+
+    // default constructor
+    public Property() {
+        this.address = "";
+        this.offeredPrice = 0;
+        this.yearBuilt = 0;
+        this.next = null;
+    }
+
+    // non-default constructor
+    public Property(String address, double offeredPrice, int yearBuilt) {
+        this.address = address;
+        this.offeredPrice = offeredPrice;
+        this.yearBuilt = yearBuilt;
+        this.next = null;
+    }
+
+    // accessor methods
+    public String getAddress() {
+        return address;
+    }
+
+    public double getOfferedPrice() {
+        return offeredPrice;
+    }
+
+    public int getYearBuilt() {
+        return yearBuilt;
+    }
+
+    public Property getNext() {
+        return next;
+    }
+
+    // mutator methods
+    public void setAddress(String address) {
+        this.address = address;
+    }
+
+    public void setOfferedPrice(double offeredPrice) {
+        this.offeredPrice = offeredPrice;
+    }
+
+    public void setYearBuilt(int yearBuilt) {
+        this.yearBuilt = yearBuilt;
+    }
+
+    public void setNext(Property next) {
+        this.next = next;
+    }
+
+    // constructs a String to show address, price, and year built
+    @Override
+    public String toString() {
+        return String.format("%-50s%s%-15.2f%-10d",
+                this.address, "$", this.offeredPrice, this.yearBuilt);
+    }
+
+    // returns true if same year built and address, else returns false
+    @Override
+    public boolean equals(Object o) {
+        return o.getClass() == this.getClass() &&
+                ((Property)o).yearBuilt == this.yearBuilt &&
+                ((Property) o).address.equals(this.address);
+    }
+}
+
+public class SingleFamilyHouse extends Property {
+    private int backyardArea;
+
+    // default constructor
+    public SingleFamilyHouse() {
+        super();
+        this.backyardArea = 0;
+    }
+
+    // non-default constructor
+    public SingleFamilyHouse(String address, double offeredPrice,
+                             int yearBuilt, int backyardArea) {
+        super(address, offeredPrice, yearBuilt);
+        this.backyardArea = backyardArea;
+    }
+
+    // accessor
+    public int getBackyardArea() {
+        return backyardArea;
+    }
+
+    // mutator
+    public void setBackyardArea(int backyardArea) {
+        this.backyardArea = backyardArea;
+    }
+
+    // constructs a String by invoking the super class method and adding backyardArea
+    @Override
+    public String toString() {
+        return String.format("%s%d%s", super.toString(), backyardArea, " (sqft)");
+    }
+
+    // returns true if super class' equals() returns true and same backyard area,
+    // else returns false
+    @Override
+    public boolean equals(Object o) {
+        return o.getClass() == this.getClass() && super.equals(o) &&
+                this.backyardArea == ((SingleFamilyHouse)o).backyardArea;
+    }
+}
+
+public class Condo extends Property {
+
+    private double hoaFee;
+
+    // default constructor
+    public Condo() {
+        super();
+        this.hoaFee = 175.00;
+    }
+
+    // non-default constructor
+    public Condo(String address, double offeredPrice,
+                 int yearBuilt, double hoaFee) {
+        super(address, offeredPrice, yearBuilt);
+        this.hoaFee = hoaFee;
+    }
+
+    // accessor
+    public double getHoaFee() {
+        return hoaFee;
+    }
+
+    // mutator
+    public void setHoaFee(double hoaFee) {
+        this.hoaFee = hoaFee;
+    }
+
+    // constructs a String by invoking the super class method and adding hoaFee
+    @Override
+    public String toString() {
+        return String.format("%s%s%-10.2f", super.toString(), "HOA fee: $", hoaFee);
+    }
+
+    // returns true if super class' equals() returns true and same hoaFee,
+    // else returns false
+    @Override
+    public boolean equals(Object o) {
+        return o.getClass() == this.getClass() && super.equals(o) &&
+                this.hoaFee == ((Condo)o).hoaFee;
+    }
+}
+
